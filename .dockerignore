@@ -19,3 +19,5 @@ htmlcov/
 media/
 staticfiles/
 *.log
+celerybeat-schedule*
+celerybeat.pid
