@@ -44,6 +44,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "rest_framework",
     "accounts.apps.AccountsConfig",
+    "debates.apps.DebatesConfig",
+    "discussions.apps.DiscussionsConfig",
+    "economy.apps.EconomyConfig",
+    "moderation.apps.ModerationConfig",
 ]
 
 MIDDLEWARE = [
