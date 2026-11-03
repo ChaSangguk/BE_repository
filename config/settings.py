@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "debates.apps.DebatesConfig",
     "discussions.apps.DiscussionsConfig",
     "economy.apps.EconomyConfig",
+    "engagement.apps.EngagementConfig",
     "moderation.apps.ModerationConfig",
 ]
 
