@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 
@@ -82,3 +83,46 @@ class User(AbstractBaseUser):
 
     def __str__(self):
         return self.nickname
+
+
+class Term(models.Model):
+    class Type(models.TextChoices):
+        SERVICE = "SERVICE"
+        PRIVACY = "PRIVACY"
+        MARKETING = "MARKETING"
+
+    type = models.CharField(max_length=9, choices=Type.choices)
+    version = models.CharField(max_length=20)
+    content = models.TextField()
+    is_required = models.BooleanField()
+    effective_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "terms"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["type", "version"],
+                name="term_type_version_uniq",
+            ),
+        ]
+
+
+class UserTermAgreement(models.Model):
+    pk = models.CompositePrimaryKey("user_id", "term_id")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    term = models.ForeignKey("accounts.Term", on_delete=models.CASCADE)
+    agreed = models.BooleanField()
+    agreed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "user_term_agreements"
+
+
+class UserInterestCategory(models.Model):
+    pk = models.CompositePrimaryKey("user_id", "category_id")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    category = models.ForeignKey("debates.Category", on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "user_interest_categories"
