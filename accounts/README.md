@@ -10,8 +10,8 @@
 - `User.objects.create_user(email=..., nickname=...)`로 생성하면 비밀번호 로그인이 불가능한 표식을 저장한다. 원본의 소셜 회원 비밀번호 NULL 설명과 다른 Django 인증용 표현이다.
 - 초기 코인 10개와 크레딧 30점 지급은 가입 서비스가 거래 내역과 함께 처리할 작업이다. 모델 기본값은 ERD대로 0이다.
 - `SUSPENDED`는 로그인 전체 차단 상태가 아니다. 쓰기 제한은 각 API의 권한 검사에서 적용해야 한다. `DELETED`는 비활성 회원으로 취급한다.
-- ERD에 관리자 권한 구조가 없어 `is_staff`는 항상 False다. `createsuperuser` 및 Django Admin 로그인은 현재 지원하지 않는다.
-- 본인 확인과 재가입 승계를 위한 데이터 구조는 아직 없다.
+- 활성 회원 중 `role=ADMIN`인 계정만 관리자 권한을 갖는다. 관리자 계정 발급 흐름은 별도로 구현한다.
+- `UserIdentityVerification`은 회원별 본인 확인 상태를 저장한다. 본인 확인 제공자 연동과 재가입 승계는 이후 구현 범위다.
 
 초기 마이그레이션은 로컬 Docker의 PostgreSQL에 적용했다. 새 팀원은 저장소를 받은 뒤
 루트 README의 절차대로 `docker compose exec api python manage.py migrate`를 실행한다.

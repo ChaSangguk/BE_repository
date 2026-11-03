@@ -39,3 +39,20 @@ class Scrap(models.Model):
                 name="scrap_user_target_uniq",
             ),
         ]
+
+
+class Ad(models.Model):
+    class Type(models.TextChoices):
+        BANNER = "BANNER"
+        POPUP = "POPUP"
+        INFEED = "INFEED"
+
+    type = models.CharField(max_length=6, choices=Type.choices)
+    image_url = models.URLField(max_length=500)
+    link_url = models.URLField(max_length=2048, null=True, blank=True)
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "ads"

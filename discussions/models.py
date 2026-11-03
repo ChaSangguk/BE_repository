@@ -99,8 +99,12 @@ class Persuasion(models.Model):
 
 
 class AISummary(models.Model):
+    class Side(models.TextChoices):
+        PRO = Stance.PRO.value, Stance.PRO.label
+        CON = Stance.CON.value, Stance.CON.label
+
     debate = models.ForeignKey("debates.Debate", on_delete=models.CASCADE)
-    stance = models.CharField(max_length=7, choices=Stance.choices)
+    stance = models.CharField(max_length=7, choices=Side.choices)
     summary_text = models.TextField()
     source_opinion_ids = models.JSONField()
     model = models.CharField(max_length=50)
