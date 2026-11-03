@@ -37,4 +37,3 @@ class StanceEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = StanceHistory
         fields = ("fromStance", "toStance", "changedAt", "opinionId")
-

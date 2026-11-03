@@ -242,9 +242,28 @@ DB 데이터는 `postgres_data`, Redis 데이터는 `redis_data` 볼륨에 저�
 DB가 초기화된 뒤 `.env`의 DB 비밀번호만 바꿔도 기존 DB 비밀번호는 바뀌지 않는다.
 
 현재는 로컬 개발용 Django 개발 서버와 Redis/Celery 실행 기반이다.
-AWS 배포, CI, 카카오 로그인 API, 실제 비동기 업무 작업과 관리자 권한 구조는 아직 포함하지 않는다.
+카카오 로그인 API와 관리자 권한 구조는 이후 구현 범위다.
 회원 모델 관련 결정은 `accounts/README.md`에 정리했다.
 
 Celery 구성은 [Django 연동 문서](https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html),
 [Redis 연동 문서](https://docs.celeryq.dev/en/stable/getting-started/backends-and-brokers/redis.html),
 [주기 작업 문서](https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html)를 참고한다.
+
+## 토론 기능 테스트
+
+개발용 Compose 환경에서 실행한다. Django는 PostgreSQL에 테스트 DB를 별도로 생성한다.
+
+```bash
+docker compose exec api python manage.py test debates
+docker compose exec api python manage.py test debates.test_results.SummarizeStancesTests
+docker compose exec api python manage.py test debates.test_results.DebateFlowTests
+docker compose exec api python manage.py test debates.test_stance_concurrency
+```
+
+- 단위 테스트는 최초·최종 입장별 집계 규칙을 검증한다.
+- 통합 테스트는 참여 목록, 입장 변경 및 이력, 마감, 최종 결과 조회를 PostgreSQL에서 검증한다.
+- 동시 변경 테스트는 별도 DB 연결 두 개에서 같은 버전으로 요청하고 한 건만 반영되는지 확인한다.
+- 자동 마감과 집계는 worker와 beat가 실행되어야 한다. 통합 테스트에서는 작업 함수를 직접 실행한다.
+
+참여 목록과 입장 변경에는 인증이 필요하다. 입장 변경 요청에는 현재 GET 응답의 version,
+변경할 stance, 계기가 된 opinionId를 전달한다. 최종 결과 API는 집계 전 202를 반환한다.

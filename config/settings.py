@@ -155,6 +155,11 @@ CELERY_IMPORTS = ('config.tasks', 'debates.tasks')
 
 # 개발환경 확인용이다. 실제 마감·보상·AI 작업은 각 도메인에서 구현한다.
 CELERY_BEAT_SCHEDULE = {
+    'compute-pending-results': {
+        'task': 'debates.tasks.compute_pending_results',
+        'schedule': 10.0,
+        'options': {'expires': 10},
+    },
     'close-due-debates': {
         'task': 'debates.tasks.close_due_debates',
         'schedule': 10.0,

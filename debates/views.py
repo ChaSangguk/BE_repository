@@ -1,12 +1,13 @@
 from django.shortcuts import get_object_or_404
+from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Debate, DebateParticipant, StanceHistory
+from .models import Debate, DebateParticipant, DebateStatistics, Stance, StanceHistory
 from .serializers import (
     JoinedDebateSerializer,
     StanceChangeInput,
@@ -74,3 +75,43 @@ class MyStanceEventListView(ListAPIView):
             debate_id=self.kwargs["debate_id"], user=self.request.user,
         )
         return StanceHistory.objects.filter(participant=participant).select_related("persuasion")
+
+
+class DebateResultView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, debate_id):
+        debate = get_object_or_404(Debate.objects.exclude(status=Debate.Status.DRAFT), pk=debate_id)
+        if debate.status == Debate.Status.CANCELED:
+            return Response({"code": "debate_canceled"}, status=409)
+        if debate.status != Debate.Status.CLOSED:
+            return Response({"code": "debate_open"}, status=409)
+
+        result = DebateStatistics.objects.filter(debate=debate).first()
+        data = {
+            "debateId": debate.id,
+            "title": debate.title,
+            "status": debate.status,
+            "closedAt": serializers.DateTimeField().to_representation(debate.closed_at),
+            "resultStatus": "PENDING",
+        }
+        if result is None:
+            return Response(data, status=202)
+
+        total = result.total_participants
+        counts = {
+            Stance.PRO: result.final_pro,
+            Stance.CON: result.final_con,
+            Stance.NEUTRAL: result.final_neutral,
+        }
+        data.update({
+            "resultStatus": "READY",
+            "participantCount": total,
+            "opinionCount": result.opinion_count,
+            "rebuttalCount": result.rebuttal_count,
+            "finalStances": {
+                stance: {"count": count, "percentage": round(count * 100 / total, 1) if total else 0.0}
+                for stance, count in counts.items()
+            },
+        })
+        return Response(data)
