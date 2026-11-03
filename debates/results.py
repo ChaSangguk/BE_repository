@@ -1,3 +1,6 @@
+import logging
+from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -5,6 +8,10 @@ from django.utils import timezone
 from discussions.models import Opinion
 
 from .models import Debate, DebateParticipant, DebateStatistics, Stance
+
+logger = logging.getLogger(__name__)
+RESULT_RETRY_DELAY = timedelta(minutes=1)
+MIN_TRANSITION_PARTICIPANTS = 20
 
 
 def summarize_stances(groups):
@@ -40,6 +47,26 @@ def compute_debate_result(debate_id):
     if debate is None or DebateStatistics.objects.filter(debate=debate).exists():
         return False
 
+    if debate.result_retry_at and debate.result_retry_at > timezone.now():
+        return False
+
+    try:
+        with transaction.atomic():
+            save_debate_statistics(debate)
+    except Exception:
+        # Roll back just this result before recording the retry under the debate lock.
+        logger.exception("Failed to compute result for debate %s", debate.pk)
+        debate.result_retry_at = timezone.now() + RESULT_RETRY_DELAY
+        debate.save(update_fields=["result_retry_at"])
+        return False
+
+    if debate.result_retry_at is not None:
+        debate.result_retry_at = None
+        debate.save(update_fields=["result_retry_at"])
+    return True
+
+
+def save_debate_statistics(debate):
     groups = (
         DebateParticipant.objects.filter(debate=debate)
         .values("initial_stance", "current_stance")
@@ -59,4 +86,3 @@ def compute_debate_result(debate_id):
         **counts,
         **summarize_stances(groups),
     )
-    return True

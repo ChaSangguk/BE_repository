@@ -1,9 +1,11 @@
+from unittest.mock import patch
+
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import Debate, DebateStatistics, Stance
-from .results import summarize_stances
+from .results import save_debate_statistics, summarize_stances
 from .tasks import close_due_debates, compute_pending_results
 from .test_stance import StanceFixture
 
@@ -48,6 +50,7 @@ class DebateFlowTests(StanceFixture, TestCase):
         result = self.client.get(result_url)
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.data["participantCount"], 2)
+        self.assertIsNone(result.data["sankeyData"])
         self.assertEqual(result.data["opinionCount"], 1)
         self.assertEqual(result.data["rebuttalCount"], 1)
         self.assertEqual(result.data["finalStances"][Stance.CON], {"count": 2, "percentage": 100.0})
@@ -64,3 +67,47 @@ class DebateFlowTests(StanceFixture, TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.data["code"], "debate_canceled")
         self.assertEqual(compute_pending_results(), 0)
+
+    def test_failure_rolls_back_one_result_and_retries_without_blocking_others(self):
+        self.debate.status = Debate.Status.CLOSED
+        self.debate.save(update_fields=["status"])
+        other_debate = Debate.objects.create(
+            creator=self.other, category=self.category, type=Debate.Type.ENDLESS,
+            title="Second debate", content="Topic", status=Debate.Status.CLOSED,
+        )
+        url = reverse("debate-result", args=[self.debate.id])
+
+        def fail_after_insert(debate):
+            save_debate_statistics(debate)
+            if debate.id == self.debate.id:
+                raise RuntimeError("Simulated result failure")
+
+        with patch("debates.results.save_debate_statistics", side_effect=fail_after_insert) as save:
+            with self.assertLogs("debates.results", level="ERROR"):
+                self.assertEqual(compute_pending_results(), 1)
+            self.assertEqual(compute_pending_results(), 0)
+            self.assertEqual(save.call_count, 2)
+
+        self.assertFalse(DebateStatistics.objects.filter(debate=self.debate).exists())
+        self.assertTrue(DebateStatistics.objects.filter(debate=other_debate).exists())
+        failed = self.client.get(url)
+        self.assertEqual(failed.status_code, 503)
+        self.assertEqual(failed.data["resultStatus"], "FAILED")
+
+        Debate.objects.filter(pk=self.debate.pk).update(result_retry_at=timezone.now())
+        self.assertEqual(compute_pending_results(), 1)
+        self.debate.refresh_from_db()
+        self.assertIsNone(self.debate.result_retry_at)
+        self.assertEqual(self.client.get(url).data["resultStatus"], "READY")
+
+    def test_sankey_visibility_changes_at_twenty_participants(self):
+        self.debate.status = Debate.Status.CLOSED
+        self.debate.save(update_fields=["status"])
+        self.assertEqual(compute_pending_results(), 1)
+        url = reverse("debate-result", args=[self.debate.id])
+        result = DebateStatistics.objects.filter(debate=self.debate)
+
+        result.update(total_participants=19)
+        self.assertIsNone(self.client.get(url).data["sankeyData"])
+        result.update(total_participants=20)
+        self.assertEqual(self.client.get(url).data["sankeyData"], result.get().sankey_data)

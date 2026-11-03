@@ -266,4 +266,7 @@ docker compose exec api python manage.py test debates.test_stance_concurrency
 - 자동 마감과 집계는 worker와 beat가 실행되어야 한다. 통합 테스트에서는 작업 함수를 직접 실행한다.
 
 참여 목록과 입장 변경에는 인증이 필요하다. 입장 변경 요청에는 현재 GET 응답의 version,
-변경할 stance, 계기가 된 opinionId를 전달한다. 최종 결과 API는 집계 전 202를 반환한다.
+변경할 stance, 계기가 된 opinionId를 전달한다.
+타이머는 `GET /v1/debates/{debateId}/timing`의 `serverTime`, `endsAt`, `status`를 사용한다.
+최종 결과 API는 집계 대기 시 202(`PENDING`), 실패 시 503(`FAILED`), 완료 시 200(`READY`)을 반환한다.
+실패한 토론은 1분 이후 자동 재시도한다. 생키 데이터는 참여자가 20명 이상일 때 공개한다.

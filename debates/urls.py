@@ -1,8 +1,15 @@
 from django.urls import path
 
-from .views import DebateResultView, JoinedDebateListView, MyStanceEventListView, MyStanceView
+from .views import (
+    DebateResultView,
+    DebateTimingView,
+    JoinedDebateListView,
+    MyStanceEventListView,
+    MyStanceView,
+)
 
 urlpatterns = [
+    path("debates/<int:debate_id>/timing", DebateTimingView.as_view(), name="debate-timing"),
     path("debates/<int:debate_id>/result", DebateResultView.as_view(), name="debate-result"),
     path("debates/<int:debate_id>/me/events", MyStanceEventListView.as_view(), name="my-stance-events"),
     path("debates/<int:debate_id>/me/stance", MyStanceView.as_view(), name="my-stance"),

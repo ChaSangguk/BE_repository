@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
@@ -8,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Debate, DebateParticipant, DebateStatistics, Stance, StanceHistory
+from .results import MIN_TRANSITION_PARTICIPANTS
 from .serializers import (
     JoinedDebateSerializer,
     StanceChangeInput,
@@ -81,21 +83,28 @@ class DebateResultView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, debate_id):
-        debate = get_object_or_404(Debate.objects.exclude(status=Debate.Status.DRAFT), pk=debate_id)
-        if debate.status == Debate.Status.CANCELED:
+        debate = get_object_or_404(
+            Debate.objects.with_deadline().exclude(status=Debate.Status.DRAFT),
+            pk=debate_id,
+        )
+        status = debate.effective_status(timezone.now())
+        if status == Debate.Status.CANCELED:
             return Response({"code": "debate_canceled"}, status=409)
-        if debate.status != Debate.Status.CLOSED:
+        if status != Debate.Status.CLOSED:
             return Response({"code": "debate_open"}, status=409)
 
         result = DebateStatistics.objects.filter(debate=debate).first()
         data = {
             "debateId": debate.id,
             "title": debate.title,
-            "status": debate.status,
+            "status": status,
             "closedAt": serializers.DateTimeField().to_representation(debate.closed_at),
             "resultStatus": "PENDING",
         }
         if result is None:
+            if debate.result_retry_at is not None:
+                data["resultStatus"] = "FAILED"
+                return Response(data, status=503)
             return Response(data, status=202)
 
         total = result.total_participants
@@ -109,9 +118,28 @@ class DebateResultView(APIView):
             "participantCount": total,
             "opinionCount": result.opinion_count,
             "rebuttalCount": result.rebuttal_count,
+            "sankeyData": result.sankey_data if total >= MIN_TRANSITION_PARTICIPANTS else None,
             "finalStances": {
                 stance: {"count": count, "percentage": round(count * 100 / total, 1) if total else 0.0}
                 for stance, count in counts.items()
             },
         })
         return Response(data)
+
+
+class DebateTimingView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, debate_id):
+        debate = get_object_or_404(
+            Debate.objects.with_deadline().exclude(status=Debate.Status.DRAFT),
+            pk=debate_id,
+        )
+        now = timezone.now()
+        date_time = serializers.DateTimeField()
+        return Response({
+            "debateId": debate.pk,
+            "status": debate.effective_status(now),
+            "serverTime": date_time.to_representation(now),
+            "endsAt": date_time.to_representation(debate.deadline),
+        })
