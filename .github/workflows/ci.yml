@@ -1,0 +1,46 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build and start PostgreSQL and Redis
+        run: |
+          cp .env.example .env
+          docker compose build api
+          docker compose up --no-build --wait --wait-timeout 120 db redis
+
+      - name: Check Django and PostgreSQL
+        run: |
+          docker compose run --rm --no-deps -T api sh -ec '
+            python manage.py check
+            python manage.py makemigrations --check --dry-run
+            python manage.py migrate --noinput
+            python manage.py test
+          '
+
+      - name: Check Celery task and result
+        run: |
+          docker compose up --no-build --no-deps -d worker
+          docker compose run --rm --no-deps -T api python manage.py shell -c \
+            "from config.tasks import ping; assert ping.delay().get(timeout=90) == 'pong'"
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 80 db redis worker
