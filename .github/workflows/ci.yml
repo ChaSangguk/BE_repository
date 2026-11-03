@@ -2,9 +2,9 @@ name: Backend CI
 
 on:
   pull_request:
-    branches: [develop]
+    branches: ['**']
   push:
-    branches: [develop]
+    branches: ['**']
 
 permissions:
   contents: read
@@ -19,6 +19,15 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Reject tracked environment files
+        shell: bash
+        run: |
+          tracked="$(git ls-files -- ':(icase,glob)**/.env' ':(icase,glob)**/.env.*' ':(exclude,glob)**/.env.example')"
+          if [[ -n "$tracked" ]]; then
+            echo "::error::Remove tracked .env files and variants. Only .env.example may be committed."
+            exit 1
+          fi
 
       - name: Build and start PostgreSQL and Redis
         run: |
