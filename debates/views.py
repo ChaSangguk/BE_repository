@@ -3,16 +3,20 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import IsAuthenticated
-
-from .models import Debate, DebateParticipant
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import JoinedDebateSerializer, StanceChangeInput, StanceStateSerializer
+from .models import Debate, DebateParticipant, StanceHistory
+from .serializers import (
+    JoinedDebateSerializer,
+    StanceChangeInput,
+    StanceEventSerializer,
+    StanceStateSerializer,
+)
 from .stance import change_stance
 
 
-class JoinedDebatePagination(CursorPagination):
+class DebateCursorPagination(CursorPagination):
     page_size = 20
     ordering = "-id"
 
@@ -21,7 +25,7 @@ class JoinedDebateListView(ListAPIView):
     visible_statuses = (Debate.Status.OPEN, Debate.Status.CLOSED)
     serializer_class = JoinedDebateSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = JoinedDebatePagination
+    pagination_class = DebateCursorPagination
 
     def get_queryset(self):
         queryset = DebateParticipant.objects.filter(
@@ -35,6 +39,7 @@ class JoinedDebateListView(ListAPIView):
         if status not in self.visible_statuses:
             raise ValidationError({"status": "Use OPEN or CLOSED."})
         return queryset.filter(debate__status=status)
+
 
 class MyStanceView(APIView):
     permission_classes = [IsAuthenticated]
@@ -56,3 +61,16 @@ class MyStanceView(APIView):
             idempotency_key=request.headers.get("Idempotency-Key"),
         )
         return Response(result)
+
+
+class MyStanceEventListView(ListAPIView):
+    serializer_class = StanceEventSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = DebateCursorPagination
+
+    def get_queryset(self):
+        participant = get_object_or_404(
+            DebateParticipant.objects.exclude(debate__status=Debate.Status.DRAFT),
+            debate_id=self.kwargs["debate_id"], user=self.request.user,
+        )
+        return StanceHistory.objects.filter(participant=participant).select_related("persuasion")

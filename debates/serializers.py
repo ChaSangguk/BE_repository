@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import DebateParticipant, Stance
+from .models import DebateParticipant, Stance, StanceHistory
 
 
 class JoinedDebateSerializer(serializers.ModelSerializer):
@@ -26,4 +26,15 @@ class StanceStateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DebateParticipant
         fields = ("initialStance", "currentStance", "version")
+
+
+class StanceEventSerializer(serializers.ModelSerializer):
+    fromStance = serializers.CharField(source="from_stance")
+    toStance = serializers.CharField(source="to_stance")
+    changedAt = serializers.DateTimeField(source="changed_at")
+    opinionId = serializers.IntegerField(source="persuasion.opinion_id", allow_null=True)
+
+    class Meta:
+        model = StanceHistory
+        fields = ("fromStance", "toStance", "changedAt", "opinionId")
 
