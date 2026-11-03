@@ -151,10 +151,16 @@ CELERY_ENABLE_UTC = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_RESULT_EXPIRES = 3600
-CELERY_IMPORTS = ('config.tasks',)
+CELERY_IMPORTS = ('config.tasks', 'debates.tasks')
 
 # 개발환경 확인용이다. 실제 마감·보상·AI 작업은 각 도메인에서 구현한다.
-CELERY_BEAT_SCHEDULE = {}
+CELERY_BEAT_SCHEDULE = {
+    'close-due-debates': {
+        'task': 'debates.tasks.close_due_debates',
+        'schedule': 10.0,
+        'options': {'expires': 10},
+    },
+}
 if os.environ.get('CELERY_HEARTBEAT_ENABLED', 'false').lower() == 'true':
     CELERY_BEAT_SCHEDULE['local-heartbeat'] = {
         'task': 'config.tasks.ping',
