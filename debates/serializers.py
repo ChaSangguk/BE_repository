@@ -1,7 +1,15 @@
+from datetime import timezone
+
 from rest_framework import serializers
 
 from .api_contract import MAX_ID
 from .models import DebateParticipant, Stance
+
+
+def utc(value):
+    if value is not None:
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return None
 
 
 class StanceChangeInput(serializers.Serializer):
@@ -22,3 +30,14 @@ class StanceStateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DebateParticipant
         fields = ("initialStance", "currentStance", "version")
+
+
+class StanceEventSerializer(serializers.BaseSerializer):
+    def to_representation(self, event):
+        return {
+            "id": str(event.pk),
+            "fromStance": event.from_stance,
+            "toStance": event.to_stance,
+            "changedAt": utc(event.changed_at),
+            "persuasionId": str(event.persuasion_id) if event.persuasion_id is not None else None,
+        }

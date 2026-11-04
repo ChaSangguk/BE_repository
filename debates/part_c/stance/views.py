@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from debates.api_contract import ContractError, ContractResponseMixin, IsActiveMember
-from debates.models import Debate, DebateParticipant, Stance
-from debates.serializers import StanceChangeInput, StanceStateSerializer
+from debates.models import Debate, DebateParticipant, Stance, StanceHistory
+from debates.serializers import StanceChangeInput, StanceEventSerializer, StanceStateSerializer
 from debates.stance import change_stance
 
 
@@ -39,3 +39,16 @@ class MyStanceView(ContractResponseMixin, APIView):
             request_path=request.path_info,
         )
         return Response(body, status=status)
+
+
+class MyStanceEventListView(ContractResponseMixin, APIView):
+    permission_classes = [IsActiveMember]
+
+    def get(self, request, debate_id):
+        participant = DebateParticipant.objects.exclude(debate__status=Debate.Status.DRAFT).filter(
+            debate_id=debate_id, user=request.user,
+        ).first()
+        if participant is None:
+            raise ContractError(403, "NOT_PARTICIPANT", "Only participants can read their stance history.")
+        events = StanceHistory.objects.filter(participant=participant).order_by("-changed_at", "-id")
+        return Response({"data": {"events": StanceEventSerializer(events, many=True).data}})
