@@ -20,6 +20,15 @@ from .views import health
 
 urlpatterns = [
     path('v1/', include('debates.urls')),
+    path('v1/', include('features.agreements.urls')),
+    path('v1/', include('features.categories.urls')),
+    path('v1/', include('features.credits.urls')),
+    path('v1/', include('features.demographics.urls')),
+    path('v1/', include('features.interests.urls')),
+    path('v1/', include('features.notifications.urls')),
+    path('v1/', include('features.reference_lookup.urls')),
+    path('v1/', include('features.trend.urls')),
+    path('v1/', include('features.wallet.urls')),
     path('health/', health, name='health'),
     path('admin/', admin.site.urls),
 ]

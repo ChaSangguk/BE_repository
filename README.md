@@ -253,6 +253,8 @@ Celery 구성은 [Django 연동 문서](https://docs.celeryq.dev/en/stable/djang
 
 입장 변경·참여 목록·타이머·결과는 [3번 파트 기능 폴더](debates/part_c/README.md)에 정리했다.
 
+별도로 추가한 회원·토론 조회 기능은 [기능별 API 폴더 안내](features/README.md)를 참고한다.
+
 개발용 Compose 환경에서 실행한다. Django는 PostgreSQL에 테스트 DB를 별도로 생성한다.
 
 ```bash
