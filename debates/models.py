@@ -77,6 +77,7 @@ class Debate(models.Model):
     view_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     closed_at = models.DateTimeField(null=True, blank=True)
+    result_retry_at = models.DateTimeField(null=True, blank=True)
     canceled_at = models.DateTimeField(null=True, blank=True)
     canceled_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, db_column="canceled_by", on_delete=models.SET_NULL,
@@ -85,6 +86,12 @@ class Debate(models.Model):
     cancel_reason = models.CharField(max_length=255, null=True, blank=True)
 
     objects = DebateQuerySet.as_manager()
+
+    def effective_status(self, at):
+        # The caller loads the same deadline expression used by the closing task.
+        if self.status == self.Status.OPEN and self.deadline and self.deadline <= at:
+            return self.Status.CLOSED
+        return self.status
 
     class Meta:
         db_table = "debates"
