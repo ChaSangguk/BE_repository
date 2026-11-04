@@ -17,7 +17,7 @@ class CloseDebateTests(StanceFixture, TestCase):
         self.debate.refresh_from_db()
         closed_at = self.debate.closed_at
         self.assertEqual(self.debate.status, Debate.Status.CLOSED)
-        self.assertGreaterEqual(closed_at, self.debate.ends_at)
+        self.assertEqual(closed_at, self.debate.ends_at)
 
         self.assertEqual(close_due_debates(), 0)
         self.debate.refresh_from_db()

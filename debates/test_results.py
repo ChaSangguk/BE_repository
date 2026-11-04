@@ -34,10 +34,13 @@ class DebateFlowTests(StanceFixture, TestCase):
         self.debate.save(update_fields=["ends_at"])
 
         self.assertEqual(close_due_debates(), 1)
-        self.assertEqual(self.patch_stance(version=1, stance=Stance.NEUTRAL).status_code, 409)
+        blocked = self.patch_stance(key="after-close", version=1, stance=Stance.NEUTRAL)
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.data["error"]["code"], "DEBATE_NOT_OPEN")
         pending = self.client.get(result_url)
-        self.assertEqual(pending.status_code, 202)
-        self.assertEqual(pending.data["resultStatus"], "PENDING")
+        self.assertEqual(pending.status_code, 409)
+        self.assertEqual(pending.data["error"]["code"], "RESULT_NOT_READY")
+        self.assertEqual(pending.data["error"]["details"]["status"], "PENDING")
 
         self.assertEqual(compute_pending_results(), 1)
         self.assertEqual(compute_pending_results(), 0)
@@ -45,15 +48,18 @@ class DebateFlowTests(StanceFixture, TestCase):
         self.assertEqual(DebateStatistics.objects.get().stance_changed_count, 1)
 
         joined = self.client.get(reverse("joined-debate-list"), {"status": "CLOSED"})
-        self.assertEqual(joined.data["results"][0]["status"], Debate.Status.CLOSED)
+        self.assertEqual(joined.data["data"]["debates"][0]["status"], Debate.Status.CLOSED)
         self.client.force_authenticate(user=None)
         result = self.client.get(result_url)
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.data["participantCount"], 2)
-        self.assertIsNone(result.data["sankeyData"])
-        self.assertEqual(result.data["opinionCount"], 1)
-        self.assertEqual(result.data["rebuttalCount"], 1)
-        self.assertEqual(result.data["finalStances"][Stance.CON], {"count": 2, "percentage": 100.0})
+        data = result.data["data"]
+        self.assertEqual(data["counts"], {
+            "totalParticipants": 2, "opinionCount": 1, "rebuttalCount": 1,
+            "finalPro": 0, "finalCon": 2, "finalNeutral": 0,
+            "stanceChangedCount": None, "stanceKeptCount": None,
+        })
+        self.assertEqual(data["sankeyData"], [])
+        self.assertTrue(data["computedAt"].endswith("Z"))
 
     def test_draft_and_canceled_debates_have_no_public_result(self):
         url = reverse("debate-result", args=[self.debate.id])
@@ -65,7 +71,7 @@ class DebateFlowTests(StanceFixture, TestCase):
         self.debate.save(update_fields=["status"])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.data["code"], "debate_canceled")
+        self.assertEqual(response.data["error"]["code"], "RESULT_NOT_READY")
         self.assertEqual(compute_pending_results(), 0)
 
     def test_failure_rolls_back_one_result_and_retries_without_blocking_others(self):
@@ -91,14 +97,15 @@ class DebateFlowTests(StanceFixture, TestCase):
         self.assertFalse(DebateStatistics.objects.filter(debate=self.debate).exists())
         self.assertTrue(DebateStatistics.objects.filter(debate=other_debate).exists())
         failed = self.client.get(url)
-        self.assertEqual(failed.status_code, 503)
-        self.assertEqual(failed.data["resultStatus"], "FAILED")
+        self.assertEqual(failed.status_code, 409)
+        self.assertEqual(failed.data["error"]["code"], "RESULT_NOT_READY")
+        self.assertEqual(failed.data["error"]["details"]["status"], "FAILED")
 
         Debate.objects.filter(pk=self.debate.pk).update(result_retry_at=timezone.now())
         self.assertEqual(compute_pending_results(), 1)
         self.debate.refresh_from_db()
         self.assertIsNone(self.debate.result_retry_at)
-        self.assertEqual(self.client.get(url).data["resultStatus"], "READY")
+        self.assertEqual(self.client.get(url).status_code, 200)
 
     def test_sankey_visibility_changes_at_twenty_participants(self):
         self.debate.status = Debate.Status.CLOSED
@@ -108,6 +115,12 @@ class DebateFlowTests(StanceFixture, TestCase):
         result = DebateStatistics.objects.filter(debate=self.debate)
 
         result.update(total_participants=19)
-        self.assertIsNone(self.client.get(url).data["sankeyData"])
+        small = self.client.get(url).data["data"]
+        self.assertEqual(small["sankeyData"], [])
+        self.assertIsNone(small["counts"]["stanceChangedCount"])
+        self.assertIsNone(small["counts"]["stanceKeptCount"])
         result.update(total_participants=20)
-        self.assertEqual(self.client.get(url).data["sankeyData"], result.get().sankey_data)
+        large = self.client.get(url).data["data"]
+        self.assertEqual(large["sankeyData"], result.get().sankey_data)
+        self.assertEqual(large["counts"]["stanceChangedCount"], result.get().stance_changed_count)
+        self.assertEqual(large["counts"]["stanceKeptCount"], result.get().stance_kept_count)

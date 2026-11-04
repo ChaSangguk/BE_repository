@@ -1,17 +1,9 @@
-from django.urls import path
+from django.urls import include, path
 
-from .views import (
-    DebateResultView,
-    DebateTimingView,
-    JoinedDebateListView,
-    MyStanceEventListView,
-    MyStanceView,
-)
 
 urlpatterns = [
-    path("debates/<int:debate_id>/timing", DebateTimingView.as_view(), name="debate-timing"),
-    path("debates/<int:debate_id>/result", DebateResultView.as_view(), name="debate-result"),
-    path("debates/<int:debate_id>/me/events", MyStanceEventListView.as_view(), name="my-stance-events"),
-    path("debates/<int:debate_id>/me/stance", MyStanceView.as_view(), name="my-stance"),
-    path("me/debates", JoinedDebateListView.as_view(), name="joined-debate-list"),
+    path("", include("debates.part_c.joined.urls")),
+    path("", include("debates.part_c.stance.urls")),
+    path("", include("debates.part_c.result.urls")),
+    path("", include("debates.part_c.timing.urls")),
 ]

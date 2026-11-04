@@ -1,22 +1,48 @@
+from datetime import timezone
+
 from rest_framework import serializers
 
-from .models import DebateParticipant, Stance, StanceHistory
+from .api_contract import MAX_ID
+from .models import DebateParticipant, Stance
 
 
-class JoinedDebateSerializer(serializers.ModelSerializer):
-    debateId = serializers.IntegerField(source="debate_id")
-    title = serializers.CharField(source="debate.title")
-    status = serializers.CharField(source="debate.status")
-    currentStance = serializers.CharField(source="current_stance")
+def utc(value):
+    if value is not None:
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return None
 
-    class Meta:
-        model = DebateParticipant
-        fields = ("debateId", "title", "status", "currentStance")
+
+class JoinedDebateSerializer(serializers.BaseSerializer):
+    def to_representation(self, participant):
+        debate = participant.debate
+        status = debate.effective_status(self.context["as_of"])
+        closed_at = debate.deadline if debate.status != status else debate.closed_at
+        return {
+            "id": str(debate.pk),
+            "kind": debate.type,
+            "title": debate.title,
+            "status": status,
+            "createdAt": utc(debate.created_at),
+            "categoryId": str(debate.category_id),
+            "participantCount": debate.participant_count,
+            "opinionCount": debate.opinion_count,
+            "viewCount": debate.view_count,
+            "startedAt": utc(debate.started_at),
+            "endsAt": utc(debate.deadline),
+            "closedAt": utc(closed_at),
+            "canceledAt": utc(debate.canceled_at),
+            "currentStance": participant.current_stance,
+        }
 
 class StanceChangeInput(serializers.Serializer):
     stance = serializers.ChoiceField(choices=Stance.choices)
-    opinionId = serializers.IntegerField(min_value=1, max_value=2**63 - 1)
-    version = serializers.IntegerField(min_value=0, max_value=2**31 - 1)
+    opinionId = serializers.RegexField(r"\A[1-9][0-9]{0,18}\Z", required=False, trim_whitespace=False)
+    version = serializers.IntegerField(min_value=0, max_value=2**31 - 1, required=False)
+
+    def validate_opinionId(self, value):
+        if not isinstance(self.initial_data["opinionId"], str) or int(value) > MAX_ID:
+            raise serializers.ValidationError("Use a positive 64-bit ID as a decimal string.")
+        return int(value)
 
 
 class StanceStateSerializer(serializers.ModelSerializer):
@@ -28,12 +54,12 @@ class StanceStateSerializer(serializers.ModelSerializer):
         fields = ("initialStance", "currentStance", "version")
 
 
-class StanceEventSerializer(serializers.ModelSerializer):
-    fromStance = serializers.CharField(source="from_stance")
-    toStance = serializers.CharField(source="to_stance")
-    changedAt = serializers.DateTimeField(source="changed_at")
-    opinionId = serializers.IntegerField(source="persuasion.opinion_id", allow_null=True)
-
-    class Meta:
-        model = StanceHistory
-        fields = ("fromStance", "toStance", "changedAt", "opinionId")
+class StanceEventSerializer(serializers.BaseSerializer):
+    def to_representation(self, event):
+        return {
+            "id": str(event.pk),
+            "fromStance": event.from_stance,
+            "toStance": event.to_stance,
+            "changedAt": utc(event.changed_at),
+            "persuasionId": str(event.persuasion_id) if event.persuasion_id is not None else None,
+        }

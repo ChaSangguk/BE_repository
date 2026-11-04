@@ -18,7 +18,7 @@ def close_due_debates():
         .values_list("id", flat=True)[:100]
     )
     return Debate.objects.with_deadline().filter(pk__in=due_ids).update(
-        status=Debate.Status.CLOSED, closed_at=now, ends_at=F("deadline"),
+        status=Debate.Status.CLOSED, closed_at=F("deadline"), ends_at=F("deadline"),
     )
 
 

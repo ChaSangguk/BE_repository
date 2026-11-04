@@ -27,8 +27,9 @@ class DebateTimingTests(StanceFixture, TestCase):
         self.debate.save(update_fields=["ends_at"])
         self.assertEqual(self.client.get(url).data["status"], Debate.Status.CLOSED)
         result = self.client.get(reverse("debate-result", args=[self.debate.id]))
-        self.assertEqual(result.status_code, 202)
-        self.assertEqual(result.data["resultStatus"], "PENDING")
+        self.assertEqual(result.status_code, 409)
+        self.assertEqual(result.data["error"]["code"], "RESULT_NOT_READY")
+        self.assertEqual(result.data["error"]["details"]["status"], "PENDING")
         self.debate.refresh_from_db()
         self.assertEqual(self.debate.status, Debate.Status.OPEN)
 

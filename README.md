@@ -251,6 +251,8 @@ Celery 구성은 [Django 연동 문서](https://docs.celeryq.dev/en/stable/djang
 
 ## 토론 기능 테스트
 
+입장 변경·참여 목록·타이머·결과는 [3번 파트 기능 폴더](debates/part_c/README.md)에 정리했다.
+
 개발용 Compose 환경에서 실행한다. Django는 PostgreSQL에 테스트 DB를 별도로 생성한다.
 
 ```bash
@@ -265,8 +267,20 @@ docker compose exec api python manage.py test debates.test_stance_concurrency
 - 동시 변경 테스트는 별도 DB 연결 두 개에서 같은 버전으로 요청하고 한 건만 반영되는지 확인한다.
 - 자동 마감과 집계는 worker와 beat가 실행되어야 한다. 통합 테스트에서는 작업 함수를 직접 실행한다.
 
-참여 목록과 입장 변경에는 인증이 필요하다. 입장 변경 요청에는 현재 GET 응답의 version,
-변경할 stance, 계기가 된 opinionId를 전달한다.
+API 정합성 반영본의 #26·27·28·44는 성공 응답의 `data`와 오류 응답의 `error` 구조를 사용한다.
+입장 변경은 `Idempotency-Key`와 `stance`를 받는다. 의견을 지정할 때만 문자열 `opinionId`를 보낸다.
+여러 기기에서 변경 충돌을 감지하는 화면은 기존 GET에서 얻은 `version`을 PATCH에 함께 보낸다. 명세대로 `version`을 생략한 요청도 허용한다.
+이전 응답 형식으로 처리된 멱등키는 기존 만료 시각까지 409를 반환해 변경을 다시 적용하는 것을 막는다.
+입장 이력은 `data.events`, 참여 목록은 `data.debates`와 `meta.nextCursor`를 반환한다.
+참여 목록의 카드에는 P1 화면에서 사용하는 `currentStance`도 들어 있다.
+
 타이머는 `GET /v1/debates/{debateId}/timing`의 `serverTime`, `endsAt`, `status`를 사용한다.
-최종 결과 API는 집계 대기 시 202(`PENDING`), 실패 시 503(`FAILED`), 완료 시 200(`READY`)을 반환한다.
-실패한 토론은 1분 이후 자동 재시도한다. 생키 데이터는 참여자가 20명 이상일 때 공개한다.
+`remainingSeconds`는 조회 순간의 남은 초이며, 마감·취소 후에는 0이다. 진행 중인 이전 데이터에 예정 시각이 없으면 `null`이다.
+최종 결과 API는 준비 전 `409 RESULT_NOT_READY`, 완료 시 `200`과 `data.counts` 등을 반환한다.
+완료 응답의 `title`, `status`, `closedAt`, `finalStancePercentages`는 결과 화면의 P1 요구사항을 위해 추가했다.
+비율은 입장별로 소수 첫째 자리까지 반환하며, 참여자가 없으면 각 입장에 0.0을 반환한다.
+실제 종료 시각 기록이 없는 이전 결과의 `closedAt`은 `null`이다.
+대기와 실패는 `error.details.status`의 `PENDING`과 `FAILED`로 구분하고, 실패한 집계는 1분 후 재시도한다.
+참여자 20명 미만이면 기능명세 FC-DB-300-008의 비공개 규칙에 따라 생키는 빈 배열이고
+입장 변경·유지 건수는 `null`이다. 이 두 건수는 API 명세의 정수 표기와 차이가 있다.
+인구통계는 공개·철회 정책 확정 전까지 숨긴다.
