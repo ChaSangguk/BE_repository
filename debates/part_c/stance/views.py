@@ -1,0 +1,41 @@
+from django.db.models import Prefetch
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from debates.api_contract import ContractError, ContractResponseMixin, IsActiveMember
+from debates.models import Debate, DebateParticipant, Stance
+from debates.serializers import StanceChangeInput, StanceStateSerializer
+from debates.stance import change_stance
+
+
+class MyStanceView(ContractResponseMixin, APIView):
+    permission_classes = [IsActiveMember]
+
+    def get(self, request, debate_id):
+        participant = get_object_or_404(
+            DebateParticipant.objects.exclude(debate__status=Debate.Status.DRAFT).prefetch_related(
+                Prefetch("debate", queryset=Debate.objects.with_deadline()),
+            ),
+            debate_id=debate_id, user=request.user,
+        )
+        can_change = participant.debate.effective_status(timezone.now()) == Debate.Status.OPEN
+        return Response({
+            **StanceStateSerializer(participant).data,
+            "selectableStances": [
+                stance for stance in Stance.values if stance != participant.current_stance
+            ] if can_change else [],
+        })
+
+    def patch(self, request, debate_id):
+        payload = StanceChangeInput(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        body, status = change_stance(
+            debate_id=debate_id, user=request.user, stance=data["stance"],
+            opinion_id=data.get("opinionId"), version=data.get("version"),
+            idempotency_key=request.headers.get("Idempotency-Key"),
+            request_path=request.path_info,
+        )
+        return Response(body, status=status)
